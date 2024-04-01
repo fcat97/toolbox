@@ -1,0 +1,208 @@
+
+import android.content.Context;
+import android.net.ConnectivityManager;
+import android.net.NetworkInfo;
+import android.net.wifi.WifiInfo;
+import android.net.wifi.WifiManager;
+import android.telephony.TelephonyManager;
+import android.text.TextUtils;
+import android.util.Patterns;
+
+import java.net.InetAddress;
+import java.net.NetworkInterface;
+import java.net.SocketException;
+import java.util.Enumeration;
+
+/**
+ * network related all operations
+ */
+
+public class NetworkUtils {
+
+
+    public static final int NETWORK_TYPE_INVALID = 0;
+
+    public static final int NETWORK_TYPE_WIFI = 1;
+
+    public static final int NETWORK_TYPE_MOBILE = 2;
+
+
+    /**
+     * Check if there is any connectivity
+     *
+     * @param context the context
+     * @return boolean boolean
+     */
+
+    public static boolean isConnected(Context context) {
+        NetworkInfo info = getNetworkInfo(context);
+        return (info != null && info.isConnected());
+    }
+
+    public static NetworkInfo getNetworkInfo(Context context) {
+        ConnectivityManager cm =
+                (ConnectivityManager) context.getSystemService(Context.CONNECTIVITY_SERVICE);
+        return cm.getActiveNetworkInfo();
+    }
+
+    public static int getNetWorkType(Context context) {
+        int mNetworkType = 0;
+        ConnectivityManager manager = (ConnectivityManager) context.getSystemService(Context.CONNECTIVITY_SERVICE);
+        NetworkInfo networkInfo = manager.getActiveNetworkInfo();
+        if (networkInfo != null && networkInfo.isConnected()) {
+            String type = networkInfo.getTypeName();
+            if (type.equalsIgnoreCase("WIFI")) {
+                mNetworkType = NETWORK_TYPE_WIFI;
+            } else if (type.equalsIgnoreCase("MOBILE")) {
+                mNetworkType = NETWORK_TYPE_MOBILE;
+            }
+        } else {
+            mNetworkType = NETWORK_TYPE_INVALID;
+        }
+        return mNetworkType;
+    }
+
+    public static boolean isNetWorkInvalid(Context context) {
+        return getNetWorkType(context) == NETWORK_TYPE_INVALID;
+    }
+
+    public static boolean isWiFi(Context context) {
+        return getNetWorkType(context) == NETWORK_TYPE_WIFI;
+    }
+
+    public static boolean isMobile(Context context) {
+        return getNetWorkType(context) == NETWORK_TYPE_MOBILE;
+    }
+
+    public static String getIPAddress(Context context) {
+        String ipAddress = null;
+        if (!isNetWorkInvalid(context)) {
+            if (isWiFi(context)) {
+                ipAddress = getWIFILocalIpAdress(context);
+            } else if (isMobile(context)) {
+                ipAddress = getGPRSLocalIpAddress();
+            }
+        }
+        if (TextUtils.isEmpty(ipAddress)) {
+            ipAddress = getHostIp();
+        }
+        if (!TextUtils.isEmpty(ipAddress) &&
+                !Patterns.IP_ADDRESS.matcher(ipAddress).matches()) {
+            return null;
+        }
+        return ipAddress;
+    }
+
+    public static String getMacAddress(Context mContext) {
+        WifiManager wifiManager = (WifiManager) mContext.getSystemService(Context.WIFI_SERVICE);
+        WifiInfo wifiInfo = wifiManager.getConnectionInfo();
+        return wifiInfo.getMacAddress();
+    }
+
+    public static String getGPRSLocalIpAddress() {
+        try {
+            for (Enumeration<NetworkInterface> en = NetworkInterface.getNetworkInterfaces(); en.hasMoreElements(); ) {
+                NetworkInterface intf = en.nextElement();
+                for (Enumeration<InetAddress> enumIpAddr = intf.getInetAddresses(); enumIpAddr.hasMoreElements(); ) {
+                    InetAddress inetAddress = enumIpAddr.nextElement();
+                    if (!inetAddress.isLoopbackAddress())
+                        return inetAddress.getHostAddress();
+                }
+            }
+        } catch (SocketException ex) {
+            L.e("GPRS IpAddress", ex.toString());
+        }
+        return null;
+    }
+
+    public static String getWIFILocalIpAdress(Context mContext) {
+        WifiManager wifiManager = (WifiManager) mContext.getSystemService(Context.WIFI_SERVICE);
+        if (!wifiManager.isWifiEnabled()) {
+            wifiManager.setWifiEnabled(true);
+        }
+        WifiInfo wifiInfo = wifiManager.getConnectionInfo();
+        int ipAddress = wifiInfo.getIpAddress();
+        return formatIpAddress(ipAddress);
+    }
+
+    public static String getHostIp() {
+        try {
+            for (Enumeration<NetworkInterface> en = NetworkInterface.getNetworkInterfaces(); en.hasMoreElements(); ) {
+                NetworkInterface intf = en.nextElement();
+                for (Enumeration<InetAddress> ipAddr = intf.getInetAddresses(); ipAddr.hasMoreElements(); ) {
+                    InetAddress inetAddress = ipAddr.nextElement();
+                    if (!inetAddress.isLoopbackAddress()) {
+                        return inetAddress.getHostAddress();
+                    }
+                }
+            }
+        } catch (Exception ignored) {
+        }
+        return null;
+    }
+
+    private static String formatIpAddress(int ipAdress) {
+        if (ipAdress == 0) {
+            return null;
+        }
+        return (ipAdress & 0xFF) + "." +
+                ((ipAdress >> 8) & 0xFF) + "." +
+                ((ipAdress >> 16) & 0xFF) + "." +
+                (ipAdress >> 24 & 0xFF);
+    }
+
+    /**
+     * Check if the connection is fast
+     * @param type
+     * @param subType
+     * @return
+     */
+    public static boolean isConnectionFast(int type, int subType){
+        if(type==ConnectivityManager.TYPE_WIFI){
+            return true;
+        }else if(type==ConnectivityManager.TYPE_MOBILE){
+            switch(subType){
+                case TelephonyManager.NETWORK_TYPE_1xRTT:
+                    return false; // ~ 50-100 kbps
+                case TelephonyManager.NETWORK_TYPE_CDMA:
+                    return false; // ~ 14-64 kbps
+                case TelephonyManager.NETWORK_TYPE_EDGE:
+                    return false; // ~ 50-100 kbps
+                case TelephonyManager.NETWORK_TYPE_EVDO_0:
+                    return true; // ~ 400-1000 kbps
+                case TelephonyManager.NETWORK_TYPE_EVDO_A:
+                    return true; // ~ 600-1400 kbps
+                case TelephonyManager.NETWORK_TYPE_GPRS:
+                    return false; // ~ 100 kbps
+                case TelephonyManager.NETWORK_TYPE_HSDPA:
+                    return true; // ~ 2-14 Mbps
+                case TelephonyManager.NETWORK_TYPE_HSPA:
+                    return true; // ~ 700-1700 kbps
+                case TelephonyManager.NETWORK_TYPE_HSUPA:
+                    return true; // ~ 1-23 Mbps
+                case TelephonyManager.NETWORK_TYPE_UMTS:
+                    return true; // ~ 400-7000 kbps
+			/*
+			 * Above API level 7, make sure to set android:targetSdkVersion
+			 * to appropriate level to use these
+			 */
+                case TelephonyManager.NETWORK_TYPE_EHRPD: // API level 11
+                    return true; // ~ 1-2 Mbps
+                case TelephonyManager.NETWORK_TYPE_EVDO_B: // API level 9
+                    return true; // ~ 5 Mbps
+                case TelephonyManager.NETWORK_TYPE_HSPAP: // API level 13
+                    return true; // ~ 10-20 Mbps
+                case TelephonyManager.NETWORK_TYPE_IDEN: // API level 8
+                    return false; // ~25 kbps
+                case TelephonyManager.NETWORK_TYPE_LTE: // API level 11
+                    return true; // ~ 10+ Mbps
+                // Unknown
+                case TelephonyManager.NETWORK_TYPE_UNKNOWN:
+                default:
+                    return false;
+            }
+        }else{
+            return false;
+        }
+    }
+}
