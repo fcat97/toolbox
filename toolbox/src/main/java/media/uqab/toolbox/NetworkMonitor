@@ -1,0 +1,129 @@
+import android.content.BroadcastReceiver
+import android.content.Context
+import android.content.Intent
+import android.content.IntentFilter
+import android.net.ConnectivityManager
+import android.telephony.TelephonyManager
+import androidx.core.content.ContextCompat
+import androidx.lifecycle.LiveData
+import androidx.lifecycle.asLiveData
+import com.portonics.robi_airtel_super_app.data.model.NetworkType
+import dagger.hilt.android.qualifiers.ApplicationContext
+import kotlinx.coroutines.flow.MutableStateFlow
+import java.util.UUID
+import java.util.concurrent.atomic.AtomicBoolean
+import javax.inject.Inject
+import javax.inject.Singleton
+
+@Singleton
+class NetworkMonitor @Inject constructor(
+    @ApplicationContext private val context: Context
+) {
+
+    private val networkTypeStateFlow = MutableStateFlow<NetworkType?>(null)
+
+    val statusLiveData: LiveData<NetworkType?>
+        get() = networkTypeStateFlow.asLiveData(timeoutInMs = Long.MAX_VALUE)
+
+    private var eventTag: UUID? = null
+
+    private var initDone = AtomicBoolean(false)
+    private var mReceiverRegistered = false
+    private var hasInternetConnection = false
+    private val connectivityChangeFilter = "android.net.conn.CONNECTIVITY_CHANGE"
+
+    private val intentFilterForConnectivityChangeBroadcastReceiver by lazy {
+        IntentFilter(connectivityChangeFilter)
+    }
+
+    private val broadcastReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context?, intent: Intent?) {
+            if (intent?.action?.equals(connectivityChangeFilter, ignoreCase = true) == true) {
+                context?.let {
+                    updateNetworkStatus(context)
+                }
+            }
+        }
+    }
+
+    fun getEventTag() = eventTag?.toString()
+
+    @Suppress("DEPRECATION")
+    fun updateNetworkStatus(context: Context) {
+        hasInternetConnection =
+            (context.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager)
+                .activeNetworkInfo?.isConnected == true
+        getNetworkType().let {
+            if (it != networkTypeStateFlow.value) {
+                networkTypeStateFlow.value = it
+                eventTag = UUID.randomUUID()
+            }
+        }
+    }
+
+    fun isConnected() = hasInternetConnection
+    fun isOnDataNetwork(): Boolean = networkTypeStateFlow.value != null &&
+            listOf(NetworkType.GSM_CDMA, NetworkType.LTE, NetworkType.WCDMA).contains(
+                networkTypeStateFlow.value
+            )
+
+    private fun resisterBroadcastReceiver() {
+        if (!mReceiverRegistered) {
+            ContextCompat.registerReceiver(
+                context.applicationContext, broadcastReceiver,
+                intentFilterForConnectivityChangeBroadcastReceiver,
+                ContextCompat.RECEIVER_EXPORTED
+            )
+            mReceiverRegistered = true
+        }
+    }
+
+    fun init() {
+        if (!initDone.get()) {
+            initDone.getAndSet(true)
+            resisterBroadcastReceiver()
+        }
+    }
+
+    private fun getStringNetworkTypeFromInt(networkType: Int): NetworkType? {
+        return when (networkType) {
+            TelephonyManager.NETWORK_TYPE_GPRS,
+            TelephonyManager.NETWORK_TYPE_EDGE,
+            TelephonyManager.NETWORK_TYPE_CDMA,
+            TelephonyManager.NETWORK_TYPE_1xRTT -> NetworkType.GSM_CDMA
+
+            TelephonyManager.NETWORK_TYPE_UMTS,
+            TelephonyManager.NETWORK_TYPE_EVDO_0,
+            TelephonyManager.NETWORK_TYPE_EVDO_A,
+            TelephonyManager.NETWORK_TYPE_HSDPA,
+            TelephonyManager.NETWORK_TYPE_HSUPA,
+            TelephonyManager.NETWORK_TYPE_HSPA,
+            TelephonyManager.NETWORK_TYPE_EVDO_B,
+            TelephonyManager.NETWORK_TYPE_EHRPD,
+            TelephonyManager.NETWORK_TYPE_HSPAP -> NetworkType.WCDMA
+
+            TelephonyManager.NETWORK_TYPE_LTE -> NetworkType.LTE
+
+            else -> null
+        }
+    }
+
+    @Suppress("DEPRECATION")
+    fun getNetworkType(): NetworkType {
+
+        val connectivityManager =
+            context.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
+
+        return connectivityManager.activeNetworkInfo?.let { networkInfo ->
+            if (networkInfo.isConnected) {
+                when (networkInfo.type) {
+                    ConnectivityManager.TYPE_MOBILE -> getStringNetworkTypeFromInt(networkInfo.subtype)
+                    ConnectivityManager.TYPE_WIFI -> NetworkType.WIFI
+                    else -> null
+                }
+            } else {
+                null
+            }
+        } ?: NetworkType.DC
+    }
+}
