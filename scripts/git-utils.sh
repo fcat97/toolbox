@@ -26,7 +26,7 @@ function compare_branches() {
             if [[ "$ahead" -eq 0 && "$behind" -eq 0 ]]; then
                 printf "${GREEN}%s${NC} ${CYAN}===${NC} ${MAGENTA}%s${NC}\n" "$branch" "$remote_branch"
             else
-                printf "${YELLOW}%s${NC} [%s^ | %sv] ${MAGENTA}%s${NC}\n" \
+                printf "${YELLOW}%s${NC} [%s↑ | %s↓] ${MAGENTA}%s${NC}\n" \
                     "$branch" \
                     "$( [[ $ahead -ne 0 ]] && echo -e "${RED}$ahead${YELLOW}" || echo "0")" \
                     "$( [[ $behind -ne 0 ]] && echo -e "${RED}$behind${YELLOW}" || echo "0")" \
@@ -196,15 +196,46 @@ function push_local_only_branches() {
     fi
 }
 
+function compare_with_selected_branch() {
+    if ! select_branch_menu; then
+        return
+    fi
+    echo -e "\n${CYAN}Comparing ${MAGENTA}$selected_branch${NC} with all other branches\n"
+
+    # Build a sorted list of all branches except the selected one
+    mapfile -t other_branches < <(
+        (git for-each-ref --format='%(refname:short)' refs/heads/
+        git for-each-ref --format='%(refname:short)' refs/remotes/origin/
+        ) | grep -vE '^(origin/HEAD|HEAD$)' | grep -vFx "$selected_branch" | sort | uniq
+    )
+
+    for branch in "${other_branches[@]}"; do
+        [[ -z "$branch" ]] && continue
+        [[ "$branch" == "$selected_branch" ]] && continue
+
+        ahead=$(git rev-list --left-right --count "$selected_branch...$branch" 2>/dev/null | awk '{print $1}')
+        behind=$(git rev-list --left-right --count "$selected_branch...$branch" 2>/dev/null | awk '{print $2}')
+
+        if [[ "$ahead" -ne 0 || "$behind" -ne 0 ]]; then
+            printf "${YELLOW}%s${NC} [%s↑ | %s↓] ${MAGENTA}%s${NC}\n" \
+                "$selected_branch" \
+                "$( [[ $ahead -ne 0 ]] && echo -e "${RED}$ahead${YELLOW}" || echo "0")" \
+                "$( [[ $behind -ne 0 ]] && echo -e "${RED}$behind${YELLOW}" || echo "0")" \
+                "$branch"
+        fi
+    done
+}
+
 function show_menu() {
     echo -e "${CYAN}Git Utils - Select a feature to run:${NC}"
     echo "1) Compare local and remote branches"
     echo "2) Clean (delete) local branches fully synced with remote"
     echo "3) List branches merged in a selected branch"
     echo "4) Push all local-only branches to remote"
+    echo "5) Compare a selected branch with all other branches"
     echo "q) Quit"
     echo
-    read -p "Enter your choice [1-4/q]: " choice
+    read -p "Enter your choice [1-5/q]: " choice
 }
 
 while true; do
@@ -221,6 +252,9 @@ while true; do
             ;;
         4)
             push_local_only_branches
+            ;;
+        5)
+            compare_with_selected_branch
             ;;
         q|Q)
             echo "Bye!"
