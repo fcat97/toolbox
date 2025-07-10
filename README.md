@@ -10,5 +10,5 @@ A utility repository to get started quickly.
 5) Compare a selected branch with all other branches
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/fcat97/toolbox/7a90770466e45efb7817fba0e8285d366143e0e3/scripts/git-utils-installer.sh -o /tmp/install-git-utils.sh && bash /tmp/install-git-utils.sh
+curl -fsSL https://raw.githubusercontent.com/fcat97/toolbox/refs/heads/master/scripts/git-utils-installer.sh -o /tmp/install-git-utils.sh && bash /tmp/install-git-utils.sh
 ```
