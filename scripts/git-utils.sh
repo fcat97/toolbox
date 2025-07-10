@@ -200,13 +200,20 @@ function compare_with_selected_branch() {
     if ! select_branch_menu; then
         return
     fi
-    echo -e "\n${CYAN}Comparing ${MAGENTA}$selected_branch${NC} with all other branches\n"
 
-    # Build a sorted list of all branches except the selected one
+    # Ask for a prefix filter
+    echo
+    read -p "Enter a branch name prefix to filter (leave empty to compare with all branches): " prefix
+
+    echo -e "\n${CYAN}Comparing ${MAGENTA}$selected_branch${NC} with all other branches"
+    [[ -n "$prefix" ]] && echo -e "${CYAN}Filtering branches with prefix: '${prefix}'${NC}"
+    echo
+
+    # Build a sorted list of all branches except the selected one, filter by prefix if set
     mapfile -t other_branches < <(
         (git for-each-ref --format='%(refname:short)' refs/heads/
         git for-each-ref --format='%(refname:short)' refs/remotes/origin/
-        ) | grep -vE '^(origin/HEAD|HEAD$)' | grep -vFx "$selected_branch" | sort | uniq
+        ) | grep -vE '^(origin/HEAD|HEAD$)' | grep -vFx "$selected_branch" | sort | uniq | ( [[ -z "$prefix" ]] && cat || grep "^$prefix" )
     )
 
     for branch in "${other_branches[@]}"; do
