@@ -10,7 +10,7 @@ RED='\033[0;31m'
 RESET='\033[0m'
 
 TOOLBOX_DIR="$HOME/.fcat97/toolbox/scripts"
-SCRIPT_URL="https://raw.githubusercontent.com/fcat97/toolbox/909f2f8cd3bd2649be584df4f3171e4e2501e2ba/scripts/git-utils.sh"
+SCRIPT_URL="https://raw.githubusercontent.com/fcat97/toolbox/356d63313c2ade944b0d84de14a1c2c59f670407/scripts/git-utils.sh"
 SCRIPT_NAME="git-utils.sh"
 TARGET_SCRIPT="$TOOLBOX_DIR/$SCRIPT_NAME"
 
