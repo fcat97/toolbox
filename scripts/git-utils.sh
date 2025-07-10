@@ -103,6 +103,40 @@ function select_branch_menu() {
     done
 }
 
+function print_grouped_sorted_branches_tabbed() {
+    # $1: associative array name (commit -> branches string, comma separated)
+    # $2: BRANCH_INDEX_MAP array name
+    local -n group_map=$1
+    local -n idx_map=$2
+
+    # Prepare an array of all groups, each element: "commit|branch1,branch2,branch3"
+    local groups=()
+    for commit in "${!group_map[@]}"; do
+        # Split branch list, sort, then join again
+        IFS=',' read -ra branches <<< "${group_map[$commit]%,}"
+        IFS=$'\n' sorted_branches=($(printf "%s\n" "${branches[@]}" | sort))
+        groups+=( "$(printf "%s|" "$commit")$(IFS=','; echo "${sorted_branches[*]}")" )
+    done
+
+    # Sort all groups by the first branch in each group
+    IFS=$'\n' sorted_groups=($(printf "%s\n" "${groups[@]}" | sort -t'|' -k2,2))
+
+    for group in "${sorted_groups[@]}"; do
+        IFS='|' read -r commit rest <<< "$group"
+        # All branch names in the group, sorted
+        IFS=',' read -ra branches <<< "$rest"
+        for idx in "${!branches[@]}"; do
+            branch="${branches[$idx]}"
+            branch_num="${idx_map[$branch]}"
+            if [[ $idx -eq 0 ]]; then
+                echo    "-| $branch_num | $branch"
+            else
+                echo -e "\t-| $branch_num | $branch"
+            fi
+        done
+    done
+}
+
 function list_merged_branches() {
     if ! select_branch_menu; then
         return
@@ -118,6 +152,7 @@ function list_merged_branches() {
         return
     fi
 
+    # LOCAL BRANCHES
     mapfile -t local_merged < <(git branch --merged "$base_branch" | grep -vE "^\*|\b$selected_branch$" | sed 's/^[ *]*//')
     declare -A commit_to_branches
     for branch in "${local_merged[@]}"; do
@@ -129,21 +164,10 @@ function list_merged_branches() {
         echo -e "${YELLOW}No local branches are fully merged into ${MAGENTA}$selected_branch${NC}"
     else
         echo -e "${GREEN}Local branches fully merged into ${MAGENTA}$selected_branch${NC}:"
-        for commit in "${!commit_to_branches[@]}"; do
-            branches_line="${commit_to_branches[$commit]%,}"
-            IFS=',' read -ra branches_array <<< "$branches_line"
-            for idx in "${!branches_array[@]}"; do
-                branch_name="${branches_array[$idx]}"
-                branch_num="${BRANCH_INDEX_MAP[$branch_name]}"
-                if [[ $idx -eq 0 ]]; then
-                    echo    "-| $branch_num | $branch_name"
-                else
-                    echo -e "\t-| $branch_num | $branch_name"
-                fi
-            done
-        done
+        print_grouped_sorted_branches_tabbed commit_to_branches BRANCH_INDEX_MAP
     fi
 
+    # REMOTE BRANCHES
     mapfile -t remote_merged < <(git branch -r --merged "$base_branch" | grep '^  origin/' | grep -v "$selected_branch" | grep -v "origin/HEAD" | sed 's/^[ *]*//')
     declare -A remote_commit_to_branches
     for branch in "${remote_merged[@]}"; do
@@ -153,19 +177,7 @@ function list_merged_branches() {
 
     if [[ ${#remote_commit_to_branches[@]} -gt 0 ]]; then
         echo -e "\n${GREEN}Remote (origin) branches merged into ${MAGENTA}$selected_branch${NC}:"
-        for commit in "${!remote_commit_to_branches[@]}"; do
-            branches_line="${remote_commit_to_branches[$commit]%,}"
-            IFS=',' read -ra branches_array <<< "$branches_line"
-            for idx in "${!branches_array[@]}"; do
-                branch_name="${branches_array[$idx]}"
-                branch_num="${BRANCH_INDEX_MAP[$branch_name]}"
-                if [[ $idx -eq 0 ]]; then
-                    echo    "-| $branch_num | $branch_name"
-                else
-                    echo -e "\t-| $branch_num | $branch_name"
-                fi
-            done
-        done
+        print_grouped_sorted_branches_tabbed remote_commit_to_branches BRANCH_INDEX_MAP
     fi
 }
 
@@ -201,7 +213,6 @@ function compare_with_selected_branch() {
         return
     fi
 
-    # Ask for a prefix filter
     echo
     read -p "Enter a branch name prefix to filter (leave empty to compare with all branches): " prefix
 
@@ -209,7 +220,6 @@ function compare_with_selected_branch() {
     [[ -n "$prefix" ]] && echo -e "${CYAN}Filtering branches with prefix: '${prefix}'${NC}"
     echo
 
-    # Build a sorted list of all branches except the selected one, filter by prefix if set
     mapfile -t other_branches < <(
         (git for-each-ref --format='%(refname:short)' refs/heads/
         git for-each-ref --format='%(refname:short)' refs/remotes/origin/
