@@ -10,7 +10,8 @@ RED='\033[0;31m'
 RESET='\033[0m'
 
 TOOLBOX_DIR="$HOME/.fcat97/toolbox/scripts"
-SCRIPT_URL="https://raw.githubusercontent.com/fcat97/toolbox/refs/heads/master/scripts/git-utils.sh"
+# copy parmalink => open in incognito => click on raw button => copy url
+SCRIPT_URL="https://raw.githubusercontent.com/fcat97/toolbox/724f9ce36ef2ca032f497176351aae9e8944807a/scripts/git-utils.sh"
 SCRIPT_NAME="git-utils.sh"
 TARGET_SCRIPT="$TOOLBOX_DIR/$SCRIPT_NAME"
 
