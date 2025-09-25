@@ -181,6 +181,52 @@ function list_merged_branches() {
     fi
 }
 
+function list_not_merged_branches() {
+    if ! select_branch_menu; then
+        return
+    fi
+    echo -e "\n${CYAN}Listing branches NOT merged into ${MAGENTA}$selected_branch${NC}\n"
+
+    if git show-ref --verify --quiet "refs/heads/$selected_branch"; then
+        base_branch="$selected_branch"
+    elif git show-ref --verify --quiet "refs/remotes/$selected_branch"; then
+        base_branch="remotes/$selected_branch"
+    else
+        echo -e "${RED}Branch reference not found: $selected_branch${NC}"
+        return
+    fi
+
+    # LOCAL BRANCHES
+    mapfile -t local_not_merged < <(git branch --no-merged "$base_branch" | grep -vE "^\*|\b$selected_branch$" | sed 's/^[ *]*//')
+    declare -A commit_to_branches
+    for branch in "${local_not_merged[@]}"; do
+        commit=$(git rev-parse "$branch")
+        commit_to_branches["$commit"]+="$branch,"
+    done
+
+    if [[ ${#commit_to_branches[@]} -eq 0 ]]; then
+        echo -e "${GREEN}All local branches are merged into ${MAGENTA}$selected_branch${NC}"
+    else
+        echo -e "${YELLOW}Local branches NOT merged into ${MAGENTA}$selected_branch${NC}:"
+        print_grouped_sorted_branches_tabbed commit_to_branches BRANCH_INDEX_MAP
+    fi
+
+    # REMOTE BRANCHES
+    mapfile -t remote_not_merged < <(git branch -r --no-merged "$base_branch" | grep '^  origin/' | grep -v "$selected_branch" | grep -v "origin/HEAD" | sed 's/^[ *]*//')
+    declare -A remote_commit_to_branches
+    for branch in "${remote_not_merged[@]}"; do
+        commit=$(git rev-parse "$branch")
+        remote_commit_to_branches["$commit"]+="$branch,"
+    done
+
+    if [[ ${#remote_commit_to_branches[@]} -gt 0 ]]; then
+        echo -e "\n${YELLOW}Remote (origin) branches NOT merged into ${MAGENTA}$selected_branch${NC}:"
+        print_grouped_sorted_branches_tabbed remote_commit_to_branches BRANCH_INDEX_MAP
+    else
+        echo -e "\n${GREEN}All remote branches are merged into ${MAGENTA}$selected_branch${NC}"
+    fi
+}
+
 function push_local_only_branches() {
     echo -e "${CYAN}Fetching all branches from origin...${NC}"
     git fetch origin --prune
@@ -248,11 +294,12 @@ function show_menu() {
     echo "1) Compare local and remote branches"
     echo "2) Clean (delete) local branches fully synced with remote"
     echo "3) List branches merged in a selected branch"
-    echo "4) Push all local-only branches to remote"
-    echo "5) Compare a selected branch with all other branches"
+    echo "4) List branches NOT merged in a selected branch"
+    echo "5) Push all local-only branches to remote"
+    echo "6) Compare a selected branch with all other branches"
     echo "q) Quit"
     echo
-    read -p "Enter your choice [1-5/q]: " choice
+    read -p "Enter your choice [1-6/q]: " choice
 }
 
 while true; do
