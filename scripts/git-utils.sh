@@ -315,9 +315,12 @@ while true; do
             list_merged_branches
             ;;
         4)
-            push_local_only_branches
+            list_not_merged_branches
             ;;
         5)
+            push_local_only_branches
+            ;;
+        6)
             compare_with_selected_branch
             ;;
         q|Q)
